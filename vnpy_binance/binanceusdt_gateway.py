@@ -150,6 +150,8 @@ class BinanceUsdtGateway(BaseGateway):
 
         self.orders: Dict[str, OrderData] = {}
 
+        self.query_contracts_success = False
+
     def connect(self, setting: dict) -> None:
         """连接交易接口"""
         key: str = setting["key"]
@@ -576,6 +578,7 @@ class BinanceUsdtRestApi(RestClient):
 
     def on_query_contract(self, data: dict, request: Request) -> None:
         """合约信息查询回报"""
+        print(f'Get {len(data["symbols"])} contracts from Binance Future.')
         for d in data["symbols"]:
             base_currency: str = d["baseAsset"]
             quote_currency: str = d["quoteAsset"]
@@ -607,6 +610,7 @@ class BinanceUsdtRestApi(RestClient):
             symbol_contract_map[contract.symbol] = contract
 
         self.gateway.write_log("合约信息查询成功")
+        self.query_contracts_success = True
 
     def on_send_order(self, data: dict, request: Request) -> None:
         """委托下单回报"""

@@ -53,8 +53,8 @@ REST_HOST: str = "https://www.binance.com"
 
 # 实盘Websocket API地址
 WEBSOCKET_TRADE_HOST: str = "wss://stream.binance.com:9443/ws/"
-# WEBSOCKET_DATA_HOST: str = "wss://stream.binance.com:9443/stream?streams="
-WEBSOCKET_DATA_HOST: str = "wss://stream.binance.com:9443/ws/"
+WEBSOCKET_DATA_HOST: str = "wss://stream.binance.com:9443/stream?streams="
+# WEBSOCKET_DATA_HOST: str = "wss://stream.binance.com:9443/ws/"
 
 # 模拟盘REST API地址
 TESTNET_REST_HOST: str = "https://testnet.binance.vision"
@@ -138,6 +138,8 @@ class BinanceGateway(BaseGateway):
         self.rest_api: "BinanceRestApi" = BinanceRestApi(self)
 
         self.orders: Dict[str, OrderData] = {}
+
+        self.query_contracts_success = False
 
     def connect(self, setting: dict):
         """连接交易接口"""
@@ -519,6 +521,7 @@ class BinanceRestApi(RestClient):
 
     def on_query_contract(self, data: dict, request: Request) -> None:
         """合约信息查询回报"""
+        print(f'Get {len(data["symbols"])} contracts from Binance Spot.')
         for d in data["symbols"]:
             base_currency: str = d["baseAsset"]
             quote_currency: str = d["quoteAsset"]
@@ -549,6 +552,8 @@ class BinanceRestApi(RestClient):
             symbol_contract_map[contract.symbol] = contract
 
         self.gateway.write_log("合约信息查询成功")
+        self.gateway.query_contracts_success = True
+
 
     def on_send_order(self, data: dict, request: Request) -> None:
         """委托下单回报"""
