@@ -627,7 +627,7 @@ class BinanceUsdtRestApi(RestClient):
 
     def on_query_contract(self, data: dict, request: Request) -> None:
         """合约信息查询回报"""
-        self.gateway.write_log(f'{self.gateway_name} Get {len(data["symbols"])} contracts from {self.gateway_name}.')
+        print(f'Get {len(data["symbols"])} contracts from Binance Future.')
         for d in data["symbols"]:
             base_currency: str = d["baseAsset"]
             quote_currency: str = d["quoteAsset"]
@@ -658,20 +658,8 @@ class BinanceUsdtRestApi(RestClient):
 
             symbol_contract_map[contract.symbol] = contract
 
-        self.gateway.write_log(f"{self.gateway_name} 合约信息查询成功")
-        self.gateway.query_contracts_success = True
-
-    def on_query_trade(self, data, request: Request) -> None:
-        """"""
-        local_time: int = int(time.time() * 1000)
-        self.container.results.update({'query_trades': [local_time, data, request]})
-        self.gateway.write_log(f"{self.gateway_name} 历史成交查询成功")
-
-    def on_query_indexprice(self, data: list, request: Request) -> None:
-        """"""
-        local_time: int = int(time.time() * 1000)
-        self.container.results.update({'query_indexprice': [local_time, data, request]})
-        self.gateway.write_log(f"{self.gateway_name} 资金费率查询成功")
+        self.gateway.write_log("合约信息查询成功")
+        self.query_contracts_success = True
 
     def on_send_order(self, data: dict, request: Request) -> None:
         """委托下单回报"""
