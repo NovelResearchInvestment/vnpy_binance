@@ -39,7 +39,8 @@ from vnpy.trader.object import (
     OrderRequest,
     CancelRequest,
     SubscribeRequest,
-    HistoryRequest
+    HistoryRequest,
+    ResponseContainer
 )
 from vnpy.trader.event import EVENT_TIMER
 from vnpy.event import Event, EventEngine
@@ -138,6 +139,7 @@ class BinanceInverseGateway(BaseGateway):
         "proxy_host": "",
         "proxy_port": 0,
     }
+
     exchanges: Exchange = [Exchange.BINANCE]
 
     def __init__(self, event_engine: EventEngine, gateway_name: str = "BINANCEINVERSE") -> None:
@@ -235,6 +237,8 @@ class BinanceInverseRestApi(RestClient):
         self.order_count_lock: Lock = Lock()
         self.connect_time: int = 0
 
+        self.container = ResponseContainer()
+
     def sign(self, request: Request) -> Request:
         """生成币安签名"""
         security: Security = request.data["security"]
@@ -309,13 +313,14 @@ class BinanceInverseRestApi(RestClient):
 
         self.start(session_number)
 
-        self.gateway.write_log("REST API启动成功")
+        self.gateway.write_log(f"{self.gateway_name} REST API启动成功")
 
         self.query_time()
         self.query_account()
         self.query_position()
         self.query_order()
         self.query_contract()
+        self.query_indexprice()
         self.start_user_stream()
 
     def query_time(self) -> None:
@@ -383,6 +388,18 @@ class BinanceInverseRestApi(RestClient):
             method="GET",
             path=path,
             callback=self.on_query_contract,
+            data=data
+        )
+
+    def query_indexprice(self, symbol="") -> Request:
+        """"""
+        data = {"security": Security.SIGNED}
+        path = "/fapi/v1/premiumIndex?symbol=" + symbol
+
+        self.add_request(
+            method="GET",
+            path=path,
+            callback=self.container.store,
             data=data
         )
 
@@ -524,7 +541,7 @@ class BinanceInverseRestApi(RestClient):
             if account.balance:
                 self.gateway.on_account(account)
 
-        self.gateway.write_log("账户资金查询成功")
+        self.gateway.write_log(f"{self.gateway_name} 账户资金查询成功")
 
     def on_query_position(self, data: dict, request: Request) -> None:
         """持仓查询回报"""
@@ -548,7 +565,7 @@ class BinanceInverseRestApi(RestClient):
 
                 self.gateway.on_position(position)
 
-        self.gateway.write_log("持仓信息查询成功")
+        self.gateway.write_log(f"{self.gateway_name} 持仓信息查询成功")
 
     def on_query_order(self, data: dict, request: Request) -> None:
         """未成交委托查询回报"""
@@ -573,11 +590,11 @@ class BinanceInverseRestApi(RestClient):
             )
             self.gateway.on_order(order)
 
-        self.gateway.write_log("委托信息查询成功")
+        self.gateway.write_log(f"{self.gateway_name} 委托信息查询成功")
 
     def on_query_contract(self, data: dict, request: Request) -> None:
         """合约信息查询回报"""
-        print(f'Get {len(data["symbols"])} contracts from Binance Inverse.')
+        self.gateway.write_log(f'{self.gateway_name} Get {len(data["symbols"])} contracts from {self.gateway_name}.')
         for d in data["symbols"]:
             base_currency: str = d["baseAsset"]
             quote_currency: str = d["quoteAsset"]
@@ -608,7 +625,7 @@ class BinanceInverseRestApi(RestClient):
 
             symbol_contract_map[contract.symbol] = contract
 
-        self.gateway.write_log("合约信息查询成功")
+        self.gateway.write_log(f"{self.gateway_name} 合约信息查询成功")
         self.gateway.query_contracts_success = True
 
     def on_send_order(self, data: dict, request: Request) -> None:
@@ -772,7 +789,7 @@ class BinanceInverseTradeWebsocketApi(WebsocketClient):
 
     def on_connected(self) -> None:
         """连接成功回报"""
-        self.gateway.write_log("交易Websocket API连接成功")
+        self.gateway.write_log(f"{self.gateway_name} 交易Websocket API连接成功")
 
     def on_packet(self, packet: dict) -> None:
         """推送数据回报"""
@@ -886,7 +903,7 @@ class BinanceInverseDataWebsocketApi(WebsocketClient):
 
     def on_connected(self) -> None:
         """连接成功回报"""
-        self.gateway.write_log("行情Websocket API连接刷新")
+        self.gateway.write_log(f"{self.gateway_name} 行情Websocket API连接刷新")
 
         for req in list(self.subscribed.values()):
             self.subscribe(req)
@@ -941,12 +958,16 @@ class BinanceInverseDataWebsocketApi(WebsocketClient):
         tick: TickData = self.ticks[symbol]
 
         if channel == "ticker":
-            tick.volume = float(data['v'])
+            # reference:
+            # https://github.com/binance/binance-spot-api-docs/blob/master/web-socket-streams.md
+
+            tick.volume = float(data['Q'])
             tick.open_price = float(data['o'])
             tick.high_price = float(data['h'])
             tick.low_price = float(data['l'])
             tick.last_price = float(data['c'])
-            tick.datetime = datetime.fromtimestamp(float(data['E']) / 1000)
+            tick.turnover = tick.volume * tick.last_price
+            tick.datetime = generate_datetime(float(data['E']))
         else:
             bids: list = data["b"]
             for n in range(min(5, len(bids))):
