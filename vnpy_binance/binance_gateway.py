@@ -35,7 +35,8 @@ from vnpy.trader.object import (
     OrderRequest,
     CancelRequest,
     SubscribeRequest,
-    HistoryRequest
+    HistoryRequest,
+    ResponseContainer
 )
 from vnpy.trader.event import EVENT_TIMER
 from vnpy.event import Event, EventEngine
@@ -222,6 +223,7 @@ class BinanceRestApi(RestClient):
         self.order_count: int = 1_000_000
         self.order_count_lock: Lock = Lock()
         self.connect_time: int = 0
+        self.container = ResponseContainer()
 
     def sign(self, request: Request) -> Request:
         """生成币安签名"""
@@ -303,14 +305,13 @@ class BinanceRestApi(RestClient):
         self.query_time()
         self.query_account()
         self.query_order()
+        self.query_trade()
         self.query_contract()
         self.start_user_stream()
 
     def query_time(self) -> None:
         """查询时间"""
-        data: dict = {
-            "security": Security.NONE
-        }
+        data: dict = {"security": Security.NONE}
         path: str = "/api/v3/time"
 
         return self.add_request(
@@ -323,7 +324,6 @@ class BinanceRestApi(RestClient):
     def query_account(self) -> None:
         """查询资金"""
         data: dict = {"security": Security.SIGNED}
-
         self.add_request(
             method="GET",
             path="/api/v3/account",
@@ -334,7 +334,6 @@ class BinanceRestApi(RestClient):
     def query_order(self) -> None:
         """查询未成交委托"""
         data: dict = {"security": Security.SIGNED}
-
         self.add_request(
             method="GET",
             path="/api/v3/openOrders",
@@ -344,29 +343,30 @@ class BinanceRestApi(RestClient):
 
     def query_contract(self) -> None:
         """查询合约信息"""
-        data: dict = {
-            "security": Security.NONE
-        }
+        data: dict = {"security": Security.NONE}
         self.add_request(
             method="GET",
             path="/api/v3/exchangeInfo",
             callback=self.on_query_contract,
             data=data
         )
-        # try_count = 0
-        # while try_count < 3:
-        #     response = self.add_request(
-        #         method="GET",
-        #         path="/api/v3/exchangeInfo",
-        #         callback=self.on_query_contract,
-        #         data=data
-        #     )
-        #     if response.response is not None:
-        #         if response.response.status_code == 200:
-        #             try_count = 3
-        #
-        #     try_count += 1
-        #     print(f"合约信息未找到[Conenction Response: {response.response}] and Retrying...{try_count}")
+
+    def query_trade(self) -> Request:
+        """"""
+        data: dict = {"security": Security.SIGNED}
+        path: str = f"/fapi/v1/userTrades"
+
+        # not tested
+        # path: str = f"/fapi/v1/trades?symbol={symbol}"    # Get recent trades
+        # path = "/fapi/v1/historicalTrades"    # Get older market historical trades.
+        # path = "/fapi/v1/aggtrades"    # Get compressed, aggregate trades. Trades that fill at the time, from the same order, with the same price will have the quantity aggregated.
+
+        self.add_request(
+            method="GET",
+            path=path,
+            callback=self.on_query_trade,
+            data=data
+        )
 
     def _new_order_id(self) -> int:
         """生成本地委托号"""
@@ -552,6 +552,12 @@ class BinanceRestApi(RestClient):
 
         self.gateway.write_log(f"{self.gateway_name} 合约信息查询成功")
         self.gateway.query_contracts_success = True
+
+    def on_query_trade(self, data, request: Request) -> None:
+        """"""
+        local_time: int = int(time.time() * 1000)
+        self.container.results.update({'query_trades': [local_time, data, request]})
+        self.gateway.write_log(f"{self.gateway_name} 历史成交查询成功")
 
     def on_send_order(self, data: dict, request: Request) -> None:
         """委托下单回报"""

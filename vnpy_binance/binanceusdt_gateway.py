@@ -38,7 +38,8 @@ from vnpy.trader.object import (
     OrderRequest,
     CancelRequest,
     SubscribeRequest,
-    HistoryRequest
+    HistoryRequest,
+    ResponseContainer
 )
 from vnpy.trader.event import EVENT_TIMER
 from vnpy.event import Event, EventEngine
@@ -46,7 +47,7 @@ from vnpy.event import Event, EventEngine
 from vnpy_rest import Request, RestClient
 from vnpy_websocket import WebsocketClient
 from vnpy_rest.rest_client import Response
-from time import sleep
+
 
 # 中国时区
 CHINA_TZ = pytz.timezone("Asia/Shanghai")
@@ -234,6 +235,7 @@ class BinanceUsdtRestApi(RestClient):
         self.order_count: int = 1_000_000
         self.order_count_lock: Lock = Lock()
         self.connect_time: int = 0
+        self.container = ResponseContainer()
 
     def sign(self, request: Request) -> Request:
         """生成币安签名"""
@@ -316,15 +318,14 @@ class BinanceUsdtRestApi(RestClient):
         self.query_account()
         self.query_position()
         self.query_order()
+        self.query_trade()
         self.query_contract()
+        self.query_indexprice()
         self.start_user_stream()
 
     def query_time(self) -> None:
         """查询时间"""
-        data: dict = {
-            "security": Security.NONE
-        }
-
+        data: dict = {"security": Security.NONE}
         path: str = "/fapi/v1/time"
 
         return self.add_request(
@@ -337,9 +338,7 @@ class BinanceUsdtRestApi(RestClient):
     def query_account(self) -> None:
         """查询资金"""
         data: dict = {"security": Security.SIGNED}
-
         path: str = "/fapi/v1/account"
-
         self.add_request(
             method="GET",
             path=path,
@@ -350,9 +349,7 @@ class BinanceUsdtRestApi(RestClient):
     def query_position(self) -> None:
         """查询持仓"""
         data: dict = {"security": Security.SIGNED}
-
         path: str = "/fapi/v1/positionRisk"
-
         self.add_request(
             method="GET",
             path=path,
@@ -363,9 +360,7 @@ class BinanceUsdtRestApi(RestClient):
     def query_order(self) -> None:
         """查询未成交委托"""
         data: dict = {"security": Security.SIGNED}
-
         path: str = "/fapi/v1/openOrders"
-
         self.add_request(
             method="GET",
             path=path,
@@ -375,16 +370,40 @@ class BinanceUsdtRestApi(RestClient):
 
     def query_contract(self) -> None:
         """查询合约信息"""
-        data: dict = {
-            "security": Security.NONE
-        }
-
+        data: dict = {"security": Security.NONE}
         path: str = "/fapi/v1/exchangeInfo"
-
         self.add_request(
             method="GET",
             path=path,
             callback=self.on_query_contract,
+            data=data
+        )
+
+    def query_trade(self) -> Request:
+        """"""
+        data: dict = {"security": Security.SIGNED}
+        path: str = f"/fapi/v1/userTrades"
+
+        # not tested
+        # path: str = f"/fapi/v1/trades?symbol={symbol}"    # Get recent trades
+        # path = "/fapi/v1/historicalTrades"    # Get older market historical trades.
+        # path = "/fapi/v1/aggtrades"    # Get compressed, aggregate trades. Trades that fill at the time, from the same order, with the same price will have the quantity aggregated.
+
+        self.add_request(
+            method="GET",
+            path=path,
+            callback=self.on_query_trade,
+            data=data
+        )
+
+    def query_indexprice(self, symbol="") -> Request:
+        """"""
+        data: dict = {"security": Security.NONE}
+        path: str = "/fapi/v1/premiumIndex?symbol=" + symbol
+        self.add_request(
+            method="GET",
+            path=path,
+            callback=self.on_query_indexprice,
             data=data
         )
 
@@ -612,6 +631,18 @@ class BinanceUsdtRestApi(RestClient):
 
         self.gateway.write_log(f"{self.gateway_name} 合约信息查询成功")
         self.gateway.query_contracts_success = True
+
+    def on_query_trade(self, data, request: Request) -> None:
+        """"""
+        local_time: int = int(time.time() * 1000)
+        self.container.results.update({'query_trades': [local_time, data, request]})
+        self.gateway.write_log(f"{self.gateway_name} 历史成交查询成功")
+
+    def on_query_indexprice(self, data: list, request: Request) -> None:
+        """"""
+        local_time: int = int(time.time() * 1000)
+        self.container.results.update({'query_indexprice': [local_time, data, request]})
+        self.gateway.write_log(f"{self.gateway_name} 资金费率查询成功")
 
     def on_send_order(self, data: dict, request: Request) -> None:
         """委托下单回报"""
@@ -935,7 +966,7 @@ class BinanceUsdtDataWebsocketApi(WebsocketClient):
 
         self.init(url, self.proxy_host, self.proxy_port)
         # self.gateway.write_log(f"{self.gateway_name}, {url}, {self._session.loop}, {self._session.loop.is_running()}")
-        sleep(1)
+        time.sleep(1)
         self.start()
 
     def on_packet(self, packet: dict) -> None:
