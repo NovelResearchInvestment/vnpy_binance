@@ -368,6 +368,19 @@ class BinanceUsdtRestApi(RestClient):
             data=data
         )
 
+    def query_orders(self, symbol='BUSDUSDT') -> None:
+        """查询所有成交委托"""
+        data: dict = {"security": Security.SIGNED}
+        path: str = "/api/v3/allOrders"
+        params: dict = {"symbol": symbol}
+        self.add_request(
+            method="GET",
+            path=path,
+            callback=self.on_query_orders,
+            params=params,
+            data=data
+        )
+        
     def query_contract(self) -> None:
         """查询合约信息"""
         data: dict = {"security": Security.NONE}
@@ -399,11 +412,13 @@ class BinanceUsdtRestApi(RestClient):
     def query_indexprice(self, symbol="") -> Request:
         """"""
         data: dict = {"security": Security.NONE}
-        path: str = "/fapi/v1/premiumIndex?symbol=" + symbol
+        # path: str = "/fapi/v1/premiumIndex?symbol=" + symbol
+        params:dict = {"symbol": symbol}
         self.add_request(
             method="GET",
             path=path,
             callback=self.on_query_indexprice,
+            params=params,
             data=data
         )
 
@@ -481,7 +496,8 @@ class BinanceUsdtRestApi(RestClient):
             callback=self.on_cancel_order,
             params=params,
             data=data,
-            on_failed=self.on_cancel_failed,
+            on_failed=self.on_cancel_ordr_failed,
+            on_error=self.on_cancel_order_error,
             extra=order
         )
 
@@ -596,6 +612,12 @@ class BinanceUsdtRestApi(RestClient):
 
         self.gateway.write_log(f"{self.gateway_name} 委托信息查询成功")
 
+    def on_query_orders(self, data: dict, request: Request) -> None:
+        """"""
+        local_time: int = int(time.time() * 1000)
+        self.container.results.update({'query_orders': [local_time, data, request]})
+        self.gateway.write_log(f"{self.gateway_name} 历史委托查询成功: {request.path.split('?')[0]}")
+
     def on_query_contract(self, data: dict, request: Request) -> None:
         """合约信息查询回报"""
         self.gateway.write_log(f'{self.gateway_name} Get {len(data["symbols"])} contracts from {self.gateway_name}.')
@@ -672,15 +694,28 @@ class BinanceUsdtRestApi(RestClient):
         """委托撤单回报"""
         pass
 
-    def on_cancel_failed(self, status_code: str, request: Request) -> None:
+    def on_cancel_order_failed(self, status_code: str, request: Request) -> None:
         """撤单回报函数报错回报"""
         if request.extra:
             order = request.extra
             order.status = Status.REJECTED
             self.gateway.on_order(order)
 
-        msg = f"撤单失败，状态码：{status_code}，信息：{request.response.text}"
+        msg = f"撤单失败[on_cancel_order_failed]，状态码：{status_code}，信息：{request.response.text}"
         self.gateway.write_log(msg)
+
+    def on_cancel_order_error(
+        self, exception_type: type, exception_value: Exception, tb, request: Request
+    ) -> None:
+        """委托下单回报函数报错回报"""
+        order: OrderData = request.extra
+        order.status = Status.REJECTED
+        self.gateway.on_order(order)
+
+        msg: str = f"委托失败[on_cancel_order_error]，状态码：{status_code}，信息：{request.response.text}"
+        self.gateway.write_log(msg)
+        if not issubclass(exception_type, (ConnectionError, SSLError)):
+            self.on_error(exception_type, exception_value, tb, request)
 
     def on_start_user_stream(self, data: dict, request: Request) -> None:
         """生成listenKey回报"""
