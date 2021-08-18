@@ -299,15 +299,13 @@ class BinanceRestApi(RestClient):
 
         self.start(session_number)
 
-        self.gateway.write_log(f"{self.gateway_name} REST API启动成功")
-        self.is_connected = True
-
         self.query_time()
         self.query_account()
         self.query_order()
-        self.query_trade()
         self.query_contract()
         self.start_user_stream()
+        self.is_connected = True
+        self.gateway.write_log(f"{self.gateway_name} REST API启动成功")
 
     def query_time(self) -> None:
         """查询时间"""
@@ -315,8 +313,8 @@ class BinanceRestApi(RestClient):
         path: str = "/api/v3/time"
 
         return self.add_request(
-            "GET",
-            path,
+            method="GET",
+            path=path,
             callback=self.on_query_time,
             data=data
         )
@@ -364,10 +362,11 @@ class BinanceRestApi(RestClient):
             data=data
         )
 
-    def query_trade(self) -> Request:
+    def query_trade(self, symbol) -> Request:
         """"""
         data: dict = {"security": Security.SIGNED}
-        path: str = f"/fapi/v1/userTrades"
+        path: str = f"/api/v3/myTrades"
+        params: dict = {"symbol": symbol}
 
         # not tested
         # path: str = f"/fapi/v1/trades?symbol={symbol}"    # Get recent trades
@@ -378,6 +377,7 @@ class BinanceRestApi(RestClient):
             method="GET",
             path=path,
             callback=self.on_query_trade,
+            params=params,
             data=data
         )
 

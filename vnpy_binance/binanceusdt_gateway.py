@@ -318,7 +318,6 @@ class BinanceUsdtRestApi(RestClient):
         self.query_account()
         self.query_position()
         self.query_order()
-        self.query_trade()
         self.query_contract()
         self.query_indexprice()
         self.start_user_stream()
@@ -392,10 +391,11 @@ class BinanceUsdtRestApi(RestClient):
             data=data
         )
 
-    def query_trade(self) -> Request:
+    def query_trade(self, symbol) -> Request:
         """"""
         data: dict = {"security": Security.SIGNED}
         path: str = f"/fapi/v1/userTrades"
+        params: dict = {"symbol": symbol}
 
         # not tested
         # path: str = f"/fapi/v1/trades?symbol={symbol}"    # Get recent trades
@@ -406,13 +406,14 @@ class BinanceUsdtRestApi(RestClient):
             method="GET",
             path=path,
             callback=self.on_query_trade,
+            params=params,
             data=data
         )
 
     def query_indexprice(self, symbol="") -> Request:
         """"""
         data: dict = {"security": Security.NONE}
-        # path: str = "/fapi/v1/premiumIndex?symbol=" + symbol
+        path: str = "/fapi/v1/premiumIndex"
         params:dict = {"symbol": symbol}
         self.add_request(
             method="GET",
