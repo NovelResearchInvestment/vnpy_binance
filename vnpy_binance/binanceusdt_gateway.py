@@ -497,7 +497,7 @@ class BinanceUsdtRestApi(RestClient):
             callback=self.on_cancel_order,
             params=params,
             data=data,
-            on_failed=self.on_cancel_ordr_failed,
+            on_failed=self.on_cancel_order_failed,
             on_error=self.on_cancel_order_error,
             extra=order
         )

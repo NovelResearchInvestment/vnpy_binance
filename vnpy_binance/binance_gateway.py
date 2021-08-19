@@ -134,9 +134,9 @@ class BinanceGateway(BaseGateway):
         """构造函数"""
         super().__init__(event_engine, gateway_name)
 
-        self.trade_ws_api: "BinanceTradeWebsocketApi" = BinanceTradeWebsocketApi(self)
-        self.market_ws_api: "BinanceDataWebsocketApi" = BinanceDataWebsocketApi(self)
-        self.rest_api: "BinanceRestApi" = BinanceRestApi(self)
+        self.trade_ws_api: "BinanceSpotTradeWebsocketApi" = BinanceSpotTradeWebsocketApi(self)
+        self.market_ws_api: "BinanceSpotDataWebsocketApi" = BinanceSpotDataWebsocketApi(self)
+        self.rest_api: "BinanceSpotRestApi" = BinanceSpotRestApi(self)
 
         self.orders: Dict[str, OrderData] = {}
 
@@ -199,8 +199,13 @@ class BinanceGateway(BaseGateway):
         return self.orders.get(orderid, None)
 
 
+<<<<<<< HEAD:vnpy_binance/binance_gateway.py
 class BinanceRestApi(RestClient):
     """"""
+=======
+class BinanceSpotRestApi(RestClient):
+    """币安现货REST API"""
+>>>>>>> 26dd5e7 (fix(api): fix typos and small refactor):vnpy_binance/binance_spot_gateway.py
 
     def __init__(self, gateway: BinanceGateway) -> None:
         """构造函数"""
@@ -449,7 +454,7 @@ class BinanceRestApi(RestClient):
             callback=self.on_cancel_order,
             params=params,
             data=data,
-            on_failed=self.on_cancel_ordr_failed,
+            on_failed=self.on_cancel_order_failed,
             on_error=self.on_cancel_order_error,
             extra=order,
         )
@@ -531,7 +536,6 @@ class BinanceRestApi(RestClient):
             self.gateway.on_order(order)
 
         self.gateway.write_log(f"{self.gateway_name} 委托信息查询成功: {request.path.split('?')[0]}")
-
 
     def on_query_orders(self, data: dict, request: Request) -> None:
         """"""
