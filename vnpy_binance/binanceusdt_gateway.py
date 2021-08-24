@@ -162,7 +162,7 @@ class BinanceUsdtGateway(BaseGateway):
         proxy_host: str = setting["proxy_host"]
         proxy_port: str = setting["proxy_port"]
 
-        self.rest_api.connect(key, secret, session_number, server, proxy_host, proxy_port)
+        self.rest_api.connect(key, secret, server, proxy_host, proxy_port)
         self.market_ws_api.connect(proxy_host, proxy_port, server)
 
         self.event_engine.register(EVENT_TIMER, self.process_timer_event)
