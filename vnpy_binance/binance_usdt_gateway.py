@@ -940,10 +940,10 @@ class BinanceUsdtDataWebsocketApi(WebsocketClient):
         )
         self.ticks[req.symbol.lower()] = tick
 
-        channels = [
-            f"{req.symbol.lower()}@ticker",
-            f"{req.symbol.lower()}@depth5"
-        ]
+        channels = []
+        for ws_symbol in self.ticks.keys():
+            channels.append(ws_symbol + "@ticker")
+            channels.append(ws_symbol + "@depth")
 
         req: dict = {
             "method": "SUBSCRIBE",
