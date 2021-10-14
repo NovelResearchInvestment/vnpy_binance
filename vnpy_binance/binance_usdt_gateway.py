@@ -984,7 +984,7 @@ class BinanceUsdtDataWebsocketApi(WebsocketClient):
         channels = []
         for ws_symbol in self.ticks.keys():
             channels.append(ws_symbol + "@ticker")
-            channels.append(ws_symbol + "@depth5")
+            channels.append(ws_symbol + "@depth")
 
         req: dict = {
             "method": "SUBSCRIBE",
@@ -995,7 +995,7 @@ class BinanceUsdtDataWebsocketApi(WebsocketClient):
 
     def on_packet(self, packet: dict) -> None:
         """推送数据回报"""
-        stream:str = packet.get("stream", None)
+        stream: str = packet.get("stream", None)
 
         if not stream:
             return
