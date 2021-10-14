@@ -199,13 +199,8 @@ class BinanceGateway(BaseGateway):
         return self.orders.get(orderid, None)
 
 
-<<<<<<< HEAD:vnpy_binance/binance_gateway.py
-class BinanceRestApi(RestClient):
-    """"""
-=======
 class BinanceSpotRestApi(RestClient):
     """币安现货REST API"""
->>>>>>> 26dd5e7 (fix(api): fix typos and small refactor):vnpy_binance/binance_spot_gateway.py
 
     def __init__(self, gateway: BinanceGateway) -> None:
         """构造函数"""
@@ -899,7 +894,11 @@ class BinanceDataWebsocketApi(WebsocketClient):
 
     def on_packet(self, packet: dict) -> None:
         """推送数据回报"""
-        stream: str = packet["stream"]
+        stream: str = packet.get("stream", None)
+
+        if not stream:
+            return
+
         data: dict = packet["data"]
 
         symbol, channel = stream.split("@")

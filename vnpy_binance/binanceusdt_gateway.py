@@ -993,7 +993,7 @@ class BinanceUsdtDataWebsocketApi(WebsocketClient):
         channels = []
         for ws_symbol in self.ticks.keys():
             channels.append(ws_symbol + "@ticker")
-            channels.append(ws_symbol + "@depth5")
+            channels.append(ws_symbol + "@depth")
 
         if self.server == "REAL":
             url = F_WEBSOCKET_DATA_HOST + "/".join(channels)
@@ -1007,7 +1007,11 @@ class BinanceUsdtDataWebsocketApi(WebsocketClient):
 
     def on_packet(self, packet: dict) -> None:
         """推送数据回报"""
-        stream: str = packet["stream"]
+        stream: str = packet.get("stream", None)
+
+        if not stream:
+            return
+
         data: dict = packet["data"]
 
         symbol, channel = stream.split("@")
