@@ -930,10 +930,10 @@ class BinanceInverseDataWebsocketApi(WebsocketClient):
         )
         self.ticks[req.symbol.lower()] = tick
 
-        # 关闭之前的连接
-        if self._active:
-            self.stop()
-            self.join()
+        channels = []
+        for ws_symbol in self.ticks.keys():
+            channels.append(ws_symbol + "@ticker")
+            channels.append(ws_symbol + "@depth")
 
         # 创建新的连接
         channels = []
