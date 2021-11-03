@@ -150,9 +150,13 @@ class BinanceGateway(BaseGateway):
         proxy_host: str = setting["proxy_host"]
         proxy_port: str = setting["proxy_port"]
         server: str = setting["server"]
+        is_us: bool = setting.get('is_us') is not None
 
-        self.rest_api.connect(key, secret, session_number, proxy_host, proxy_port, server)
-        self.market_ws_api.connect(proxy_host, proxy_port, server)
+        # Accommodate account of binance.us
+        # 1) Rest API url and 2) trade websocket url
+        self.rest_api.connect(key, secret, proxy_host, proxy_port, server, is_us)
+        # 3) Market websocket url
+        self.market_ws_api.connect(proxy_host, proxy_port, server, is_us)
         self.event_engine.register(EVENT_TIMER, self.process_timer_event)
 
     def subscribe(self, req: SubscribeRequest) -> None:
@@ -279,7 +283,8 @@ class BinanceSpotRestApi(RestClient):
         session_number: int,
         proxy_host: str,
         proxy_port: int,
-        server: str
+        server: str,
+        is_us = False
     ) -> None:
         """连接REST服务器"""
         self.key = key
@@ -287,12 +292,17 @@ class BinanceSpotRestApi(RestClient):
         self.proxy_port = proxy_port
         self.proxy_host = proxy_host
         self.server = server
+        self.is_us = is_us
+        # Used in self.init(REST_HOST, proxy_host, proxy_port) and self.start_user_stream()
 
         self.connect_time = (
             int(datetime.now(CHINA_TZ).strftime("%y%m%d%H%M%S")) * self.order_count
         )
 
         if self.server == "REAL":
+            if self.is_us:
+                global REST_HOST
+                REST_HOST = REST_HOST.replace('.com', '.us')
             self.init(REST_HOST, proxy_host, proxy_port)
         else:
             self.init(TESTNET_REST_HOST, proxy_host, proxy_port)
@@ -638,6 +648,9 @@ class BinanceSpotRestApi(RestClient):
         self.keep_alive_count = 0
 
         if self.server == "REAL":
+            if self.is_us:
+                global WEBSOCKET_TRADE_HOST
+                WEBSOCKET_TRADE_HOST = WEBSOCKET_TRADE_HOST.replace('.com', '.us')
             url = WEBSOCKET_TRADE_HOST + self.user_stream_key
         else:
             url = TESTNET_WEBSOCKET_TRADE_HOST + self.user_stream_key
@@ -835,11 +848,17 @@ class BinanceDataWebsocketApi(WebsocketClient):
         self.subscribed: Dict[str, SubscribeRequest] = {}
         self.ticks: Dict[str, TickData] = {}
 
-    def connect(self, proxy_host: str, proxy_port: int, server: str):
+    def connect(self, proxy_host: str, proxy_port: int, server: str, is_us=False):
         """连接Websocket行情频道"""
-        self.proxy_host = proxy_host
-        self.proxy_port = proxy_port
-        self.server = server
+        if server == "REAL":
+            if is_us:
+                global WEBSOCKET_DATA_HOST
+                WEBSOCKET_DATA_HOST = WEBSOCKET_DATA_HOST.replace('.com', '.us')
+            self.init(WEBSOCKET_DATA_HOST, proxy_host, proxy_port)
+        else:
+            self.init(TESTNET_WEBSOCKET_DATA_HOST, proxy_host, proxy_port)
+
+        self.start()
 
     def on_connected(self) -> None:
         """连接成功回报"""
