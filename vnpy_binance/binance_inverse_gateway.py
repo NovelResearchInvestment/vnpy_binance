@@ -23,8 +23,7 @@ from vnpy.trader.constant import (
     Product,
     Status,
     OrderType,
-    Interval,
-    Offset
+    Interval
 )
 from vnpy.trader.gateway import BaseGateway
 from vnpy.trader.object import (
@@ -418,21 +417,21 @@ class BinanceInverseRestApi(RestClient):
             "security": Security.SIGNED
         }
 
-        order_type, time_condition = ORDERTYPE_VT2BINANCES[req.type]
-
         # 生成委托请求
         params: dict = {
             "symbol": req.symbol,
             "side": DIRECTION_VT2BINANCES[req.direction],
-            "type": order_type,
-            "timeInForce": time_condition,
-            "price": float(req.price),
             "quantity": float(req.volume),
             "newClientOrderId": orderid,
         }
 
-        if req.offset == Offset.CLOSE:
-            params["reduceOnly"] = True
+        if req.type == OrderType.MARKET:
+            params["type"] = "MARKET"
+        else:
+            order_type, time_condition = ORDERTYPE_VT2BINANCES[req.type]
+            params["type"] = order_type
+            params["timeInForce"] = time_condition
+            params["price"] = float(req.price)
 
         path: str = "/dapi/v1/order"
 
@@ -875,7 +874,6 @@ class BinanceInverseDataWebsocketApi(WebsocketClient):
         self.gateway: BinanceInverseGateway = gateway
         self.gateway_name: str = gateway.gateway_name
 
-        self.subscribed: Dict[str, SubscribeRequest] = {}
         self.ticks: Dict[str, TickData] = {}
         self.reqid: int = 0
 
@@ -897,19 +895,30 @@ class BinanceInverseDataWebsocketApi(WebsocketClient):
         """连接成功回报"""
         self.gateway.write_log(f"{self.gateway_name} 行情Websocket API连接刷新")
 
-        for req in list(self.subscribed.values()):
-            self.subscribe(req)
+        # 重新订阅行情
+        if self.ticks:
+            channels = []
+            for symbol in self.ticks.keys():
+                channels.append(f"{symbol}@ticker")
+                channels.append(f"{symbol}@depth5")
+
+            req: dict = {
+                "method": "SUBSCRIBE",
+                "params": channels,
+                "id": self.reqid
+            }
+            self.send_packet(req)
 
     def subscribe(self, req: SubscribeRequest) -> None:
         """订阅行情"""
+        if req.symbol in self.ticks:
+            return
+
         if req.symbol not in symbol_contract_map:
             self.gateway.write_log(f"找不到该合约代码{req.symbol}")
             return
 
         self.reqid += 1
-
-        # 缓存订阅记录
-        self.subscribed[req.vt_symbol] = req
 
         # 创建TICK对象
         tick: TickData = TickData(
@@ -921,10 +930,10 @@ class BinanceInverseDataWebsocketApi(WebsocketClient):
         )
         self.ticks[req.symbol.lower()] = tick
 
-        channels = []
-        for ws_symbol in self.ticks.keys():
-            channels.append(ws_symbol + "@ticker")
-            channels.append(ws_symbol + "@depth5")
+        channels = [
+            f"{req.symbol.lower()}@ticker",
+            f"{req.symbol.lower()}@depth5"
+        ]
 
         req: dict = {
             "method": "SUBSCRIBE",
@@ -935,7 +944,7 @@ class BinanceInverseDataWebsocketApi(WebsocketClient):
 
     def on_packet(self, packet: dict) -> None:
         """推送数据回报"""
-        stream:str = packet.get("stream", None)
+        stream: str = packet.get("stream", None)
 
         if not stream:
             return

@@ -62,7 +62,8 @@ STATUS_BINANCE2VT: Dict[str, Status] = {
     "PARTIALLY_FILLED": Status.PARTTRADED,
     "FILLED": Status.ALLTRADED,
     "CANCELED": Status.CANCELLED,
-    "REJECTED": Status.REJECTED
+    "REJECTED": Status.REJECTED,
+    "EXPIRED": Status.CANCELLED
 }
 
 # 委托类型映射
@@ -396,7 +397,6 @@ class BinanceSpotRestApi(RestClient):
             "symbol": req.symbol.upper(),
             "side": DIRECTION_VT2BINANCE[req.direction],
             "type": ORDERTYPE_VT2BINANCE[req.type],
-            "price": str(req.price),
             "quantity": format(req.volume, "f"),
             "newClientOrderId": orderid,
             "newOrderRespType": "ACK"
@@ -404,6 +404,7 @@ class BinanceSpotRestApi(RestClient):
 
         if req.type == OrderType.LIMIT:
             params["timeInForce"] = "GTC"
+            params["price"] = str(req.price)
 
         self.add_request(
             method="POST",
@@ -824,7 +825,6 @@ class BinanceSpotDataWebsocketApi(WebsocketClient):
         self.gateway_name: str = gateway.gateway_name
         self.is_connected: bool = False
 
-        self.subscribed: Dict[str, SubscribeRequest] = {}
         self.ticks: Dict[str, TickData] = {}
         self.reqid: int = 0
 
@@ -842,19 +842,30 @@ class BinanceSpotDataWebsocketApi(WebsocketClient):
         self.gateway.write_log(f"{self.gateway_name} 行情Websocket API连接刷新")
         self.is_connected = True
 
-        for req in list(self.subscribed.values()):
-            self.subscribe(req)
+        # 重新订阅行情
+        if self.ticks:
+            channels = []
+            for symbol in self.ticks.keys():
+                channels.append(f"{symbol}@ticker")
+                channels.append(f"{symbol}@depth5")
+
+            req: dict = {
+                "method": "SUBSCRIBE",
+                "params": channels,
+                "id": self.reqid
+            }
+            self.send_packet(req)
 
     def subscribe(self, req: SubscribeRequest) -> None:
         """订阅行情"""
+        if req.symbol in self.ticks:
+            return
+
         if req.symbol not in symbol_contract_map:
             self.gateway.write_log(f"找不到该合约代码{req.symbol}")
             return
 
         self.reqid += 1
-
-        # 缓存订阅记录
-        self.subscribed[req.vt_symbol] = req
 
         # 创建TICK对象
         tick: TickData = TickData(

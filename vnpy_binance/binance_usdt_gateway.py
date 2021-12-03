@@ -23,8 +23,7 @@ from vnpy.trader.constant import (
     Product,
     Status,
     OrderType,
-    Interval,
-    Offset
+    Interval
 )
 from vnpy.trader.gateway import BaseGateway
 from vnpy.trader.object import (
@@ -443,21 +442,21 @@ class BinanceUsdtRestApi(RestClient):
             "security": Security.SIGNED
         }
 
-        order_type, time_condition = ORDERTYPE_VT2BINANCES[req.type]
-
         # 生成委托请求
         params: dict = {
             "symbol": req.symbol,
             "side": DIRECTION_VT2BINANCES[req.direction],
-            "type": order_type,
-            "timeInForce": time_condition,
-            "price": float(req.price),
             "quantity": float(req.volume),
             "newClientOrderId": orderid,
         }
 
-        if req.offset == Offset.CLOSE:
-            params["reduceOnly"] = True
+        if req.type == OrderType.MARKET:
+            params["type"] = "MARKET"
+        else:
+            order_type, time_condition = ORDERTYPE_VT2BINANCES[req.type]
+            params["type"] = order_type
+            params["timeInForce"] = time_condition
+            params["price"] = float(req.price)
 
         path: str = "/fapi/v1/order"
 
@@ -934,7 +933,6 @@ class BinanceUsdtDataWebsocketApi(WebsocketClient):
         self.gateway_name: str = gateway.gateway_name
         self.is_connected: bool = False
 
-        self.subscribed: Dict[str, SubscribeRequest] = {}
         self.ticks: Dict[str, TickData] = {}
         self.reqid: int = 0
 
@@ -958,17 +956,31 @@ class BinanceUsdtDataWebsocketApi(WebsocketClient):
         self.is_connected = True
         for req in list(self.subscribed.values()):
             self.subscribe(req)
+            
+        # 重新订阅行情
+        if self.ticks:
+            channels = []
+            for symbol in self.ticks.keys():
+                channels.append(f"{symbol}@ticker")
+                channels.append(f"{symbol}@depth5")
+
+            req: dict = {
+                "method": "SUBSCRIBE",
+                "params": channels,
+                "id": self.reqid
+            }
+            self.send_packet(req)
 
     def subscribe(self, req: SubscribeRequest) -> None:
         """订阅行情"""
+        if req.symbol in self.ticks:
+            return
+
         if req.symbol not in symbol_contract_map:
             self.gateway.write_log(f"找不到该合约代码{req.symbol}")
             return
 
         self.reqid += 1
-
-        # 缓存订阅记录
-        self.subscribed[req.vt_symbol] = req
 
         # 创建TICK对象
         tick: TickData = TickData(
