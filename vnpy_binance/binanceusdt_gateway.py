@@ -133,7 +133,7 @@ class BinanceUsdtGateway(BaseGateway):
     default_setting: Dict[str, Any] = {
         "key": "",
         "secret": "",
-        "server": ["TESTNET", "REAL"],
+        "server": ["REAL", "TESTNET"],
         "proxy_host": "",
         "proxy_port": 0
     }
