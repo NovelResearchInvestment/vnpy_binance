@@ -124,9 +124,9 @@ class BinanceInverseGateway(BaseGateway):
     default_setting: Dict[str, Any] = {
         "key": "",
         "secret": "",
-        "服务器": ["REAL", "TESTNET"],
-        "代理地址": "",
-        "代理端口": 0,
+        "server": ["REAL", "TESTNET"],
+        "proxy_host": "",
+        "proxy_port": 0
     }
 
     exchanges: Exchange = [Exchange.BINANCE]
