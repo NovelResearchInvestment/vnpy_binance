@@ -133,10 +133,9 @@ class BinanceUsdtGateway(BaseGateway):
     default_setting: Dict[str, Any] = {
         "key": "",
         "secret": "",
-        "session_number": 3,
+        "server": ["REAL", "TESTNET"],
         "proxy_host": "",
-        "proxy_port": 0,
-        "server": ["TESTNET", "REAL"]
+        "proxy_port": 0
     }
 
     exchanges: Exchange = [Exchange.BINANCE]
