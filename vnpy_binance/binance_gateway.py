@@ -121,9 +121,10 @@ class BinanceGateway(BaseGateway):
     default_setting: Dict[str, Any] = {
         "key": "",
         "secret": "",
-        "server": ["REAL", "TESTNET"],
+        "server": ["TESTNET", "REAL"],
+        # "contract_type": ["COIN", "USDT"],
         "proxy_host": "",
-        "proxy_port": 0
+        "proxy_port": 0,
     }
 
     exchanges: Exchange = [Exchange.BINANCE]
@@ -310,7 +311,7 @@ class BinanceSpotRestApi(RestClient):
         else:
             self.init(TESTNET_REST_HOST, proxy_host, proxy_port)
 
-        self.start(session_number)
+        self.start()
 
         self.query_time()
         self.query_account()
@@ -422,7 +423,7 @@ class BinanceSpotRestApi(RestClient):
             "side": DIRECTION_VT2BINANCE[req.direction],
             "type": ORDERTYPE_VT2BINANCE[req.type],
             "price": str(req.price),
-            "quantity": str(req.volume),
+            "quantity": format(req.volume, "f"),
             "newClientOrderId": orderid,
             "newOrderRespType": "ACK"
         }
@@ -435,10 +436,9 @@ class BinanceSpotRestApi(RestClient):
             path="/api/v3/order",
             callback=self.on_send_order,
             params=params,
-            data=data,
-            on_failed=self.on_send_order_failed,
-            on_error=self.on_send_order_error,
             extra = order,
+            on_error=self.on_send_order_error,
+            on_failed=self.on_send_order_failed,
         )
 
         return order.vt_orderid
@@ -864,15 +864,33 @@ class BinanceDataWebsocketApi(WebsocketClient):
 
         for req in list(self.subscribed.values()):
             self.subscribe(req)
+        # 重新订阅行情
+        if self.ticks:
+            channels = []
+            for symbol in self.ticks.keys():
+                channels.append(f"{symbol}@ticker")
+                channels.append(f"{symbol}@depth")
+
+            req: dict = {
+                "method": "SUBSCRIBE",
+                "params": channels,
+                "id": self.reqid
+            }
+            self.send_packet(req)
 
     def subscribe(self, req: SubscribeRequest) -> None:
         """订阅行情"""
+        if req.symbol in self.ticks:
+            return
         if req.symbol not in symbol_contract_map:
             self.gateway.write_log(f"找不到该合约代码{req.symbol}")
             return
 
         if req.vt_symbol in self.subscribed:
             return
+
+        # 缓存订阅记录
+        self.subscribed[req.vt_symbol] = req
 
         # 缓存订阅记录
         self.subscribed[req.vt_symbol] = req
@@ -910,7 +928,7 @@ class BinanceDataWebsocketApi(WebsocketClient):
 
     def on_packet(self, packet: dict) -> None:
         """推送数据回报"""
-        stream: str = packet.get("stream", None)
+        stream:str = packet.get("stream", None)
 
         if not stream:
             return

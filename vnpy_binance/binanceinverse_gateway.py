@@ -148,8 +148,8 @@ class BinanceInverseGateway(BaseGateway):
         self.trade_ws_api: "BinanceInverseTradeWebsocketApi" = BinanceInverseTradeWebsocketApi(self)
         self.market_ws_api: "BinanceInverseDataWebsocketApi" = BinanceInverseDataWebsocketApi(self)
         self.rest_api: "BinanceInverseRestApi" = BinanceInverseRestApi(self)
-
         self.orders: Dict[str, OrderData] = {}
+        self.query_contracts_success = False
 
         self.query_contracts_success = False
 
@@ -906,6 +906,19 @@ class BinanceInverseDataWebsocketApi(WebsocketClient):
 
         for req in list(self.subscribed.values()):
             self.subscribe(req)
+                    # 重新订阅行情
+        if self.ticks:
+            channels = []
+            for symbol in self.ticks.keys():
+                channels.append(f"{symbol}@ticker")
+                channels.append(f"{symbol}@depth")
+
+            req: dict = {
+                "method": "SUBSCRIBE",
+                "params": channels,
+                "id": self.reqid
+            }
+            self.send_packet(req)
 
     def subscribe(self, req: SubscribeRequest) -> None:
         """订阅行情"""
@@ -915,6 +928,9 @@ class BinanceInverseDataWebsocketApi(WebsocketClient):
     
         if req.vt_symbol in self.subscribed:
             return
+
+        # 缓存订阅记录
+        self.subscribed[req.vt_symbol] = req
 
         # 缓存订阅记录
         self.subscribed[req.vt_symbol] = req
@@ -950,7 +966,11 @@ class BinanceInverseDataWebsocketApi(WebsocketClient):
 
     def on_packet(self, packet: dict) -> None:
         """推送数据回报"""
-        stream: str = packet["stream"]
+        stream:str = packet.get("stream", None)
+
+        if not stream:
+            return
+
         data: dict = packet["data"]
 
         symbol, channel = stream.split("@")
