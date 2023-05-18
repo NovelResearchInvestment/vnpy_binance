@@ -46,7 +46,9 @@ from vnpy.event import Event, EventEngine
 
 from vnpy_rest import Request, RestClient, Response
 from vnpy_websocket import WebsocketClient
-
+from asyncio import (
+    run_coroutine_threadsafe
+)
 
 # 中国时区
 CHINA_TZ = pytz.timezone("Asia/Shanghai")
@@ -425,6 +427,9 @@ class BinanceInverseRestApi(RestClient):
 
         if req.type == OrderType.MARKET:
             params["type"] = "MARKET"
+        elif req.type == OrderType.STOP:
+            params["type"] = "STOP_MARKET"
+            params["stopPrice"] = float(req.price)
         else:
             order_type, time_condition = ORDERTYPE_VT2BINANCES[req.type]
             params["type"] = order_type
@@ -610,6 +615,7 @@ class BinanceInverseRestApi(RestClient):
                 net_position=True,
                 history_data=True,
                 gateway_name=self.gateway_name,
+                stop_supported=True
             )
             self.gateway.on_contract(contract)
 
@@ -782,6 +788,21 @@ class BinanceInverseTradeWebsocketApi(WebsocketClient):
             self.on_account(packet)
         elif packet["e"] == "ORDER_TRADE_UPDATE":
             self.on_order(packet)
+        elif packet["e"] == "listenKeyExpired":
+            self.on_listen_key_expired()
+
+    def on_listen_key_expired(self) ->None:
+        """ListenKey过期"""
+        self.gateway.write_log("listenKey过期")
+        self.disconnect()
+
+    def disconnect(self) ->None:
+        """"主动断开webscoket链接"""
+        self._active = False
+        ws = self._ws
+        if ws:
+            coro = ws.close()
+            run_coroutine_threadsafe(coro, self._loop)
 
     def on_account(self, packet: dict) -> None:
         """资金更新推送"""
@@ -822,6 +843,7 @@ class BinanceInverseTradeWebsocketApi(WebsocketClient):
         order_type: OrderType = ORDERTYPE_BINANCES2VT.get(key, None)
         if not order_type:
             return
+        offset = self.gateway.get_order(ord_data["c"]).offset if self.gateway.get_order(ord_data["c"]) else None
 
         order: OrderData = OrderData(
             symbol=ord_data["s"],
@@ -834,7 +856,8 @@ class BinanceInverseTradeWebsocketApi(WebsocketClient):
             traded=float(ord_data["z"]),
             status=STATUS_BINANCES2VT[ord_data["X"]],
             datetime=generate_datetime(packet["E"]),
-            gateway_name=self.gateway_name
+            gateway_name=self.gateway_name,
+            offset=offset
         )
 
         self.gateway.on_order(order)
@@ -858,8 +881,14 @@ class BinanceInverseTradeWebsocketApi(WebsocketClient):
             volume=trade_volume,
             datetime=generate_datetime(ord_data["T"]),
             gateway_name=self.gateway_name,
+            offset=offset
         )
         self.gateway.on_trade(trade)
+
+    def on_disconnected(self) -> None:
+        """连接断开回报"""
+        self.gateway.write_log("交易Websocket API断开")
+        self.gateway.rest_api.start_user_stream()
 
 
 class BinanceInverseDataWebsocketApi(WebsocketClient):
@@ -985,6 +1014,10 @@ class BinanceInverseDataWebsocketApi(WebsocketClient):
         if tick.last_price:
             tick.localtime = datetime.now()
             self.gateway.on_tick(copy(tick))
+
+    def on_disconnected(self) -> None:
+        """连接断开回报"""
+        self.gateway.write_log("行情Websocket API断开")
 
 
 def generate_datetime(timestamp: float) -> datetime:
