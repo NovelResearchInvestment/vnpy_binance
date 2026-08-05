@@ -95,6 +95,7 @@ TIMEDELTA_MAP: dict[Interval, timedelta] = {
 ACCOUNT_ASSETS: set[str] = {
     "USDT", "USDC", "FDUSD", "TUSD", "BUSD",
     "USDP", "DAI", "USDE", "USD1", "BFUSD",
+    "BNB",
 }
 
 # Quote priority when mapping non-stable assets to PositionData
