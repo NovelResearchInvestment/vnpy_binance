@@ -1,3 +1,7 @@
+# 2026.08.05
+
+1. map BNB as AccountData in spot gateway (instead of PositionData)
+
 # 2026.07.23
 
 1. map non-stable coin as position data (instead of account data)

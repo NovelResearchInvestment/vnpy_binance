@@ -26,7 +26,7 @@ from .spot_gateway import BinanceSpotGateway
 from .portfolio_gateway import BinancePortfolioGateway
 
 
-__version__ = "2026.07.23"
+__version__ = "2026.08.05"
 
 
 __all__ = [
